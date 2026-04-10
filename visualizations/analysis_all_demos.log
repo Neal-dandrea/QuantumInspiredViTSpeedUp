@@ -1,0 +1,154 @@
+nohup: ignoring input
+vit will use the CLS token. feature_aggregation (attention_pool_2d) is ignored!
+======================================================================
+ UMI POLICY VISUALIZATION - ALL DEMONSTRATIONS
+======================================================================
+
+Loading policy from: /tmp/latest.ckpt
+Checkpoint exists: True
+✓ Checkpoint loaded
+Found config in checkpoint
+Loading normalizer from: /tmp/normalizer.pkl
+rgb keys:          ['camera0_rgb']
+low_dim_keys keys: ['robot0_eef_pos', 'robot0_eef_rot_axis_angle', 'robot0_eef_rot_axis_angle_wrt_start', 'robot0_gripper_width']
+✓ Policy loaded
+✓ Policy ready
+
+Loading data from: /home/wadeab/universal_manipulation_interface/data/session_001/data
+✓ Data loaded
+  Total timesteps: 85530
+  Demo length: 224 timesteps
+  Complete demos: 381
+
+⏱ Estimated runtime: 2-3 hours
+Progress will be printed every 10 demos
+
+Analyzing ALL 381 demonstrations...
+======================================================================
+Progress: 0/381 (0.0%) | Elapsed: 0.0min | ETA: 0.0min
+Progress: 10/381 (2.6%) | Elapsed: 2.6min | ETA: 94.9min
+Progress: 20/381 (5.2%) | Elapsed: 5.2min | ETA: 93.1min
+Progress: 30/381 (7.9%) | Elapsed: 7.7min | ETA: 90.5min
+Progress: 40/381 (10.5%) | Elapsed: 10.3min | ETA: 87.9min
+Progress: 50/381 (13.1%) | Elapsed: 12.9min | ETA: 85.3min
+Progress: 60/381 (15.7%) | Elapsed: 15.5min | ETA: 82.8min
+Progress: 70/381 (18.4%) | Elapsed: 18.1min | ETA: 80.2min
+Progress: 80/381 (21.0%) | Elapsed: 20.6min | ETA: 77.6min
+Progress: 90/381 (23.6%) | Elapsed: 23.2min | ETA: 75.1min
+Progress: 100/381 (26.2%) | Elapsed: 25.8min | ETA: 72.5min
+Progress: 110/381 (28.9%) | Elapsed: 28.4min | ETA: 70.0min
+Progress: 120/381 (31.5%) | Elapsed: 31.0min | ETA: 67.4min
+Progress: 130/381 (34.1%) | Elapsed: 33.6min | ETA: 64.8min
+Progress: 140/381 (36.7%) | Elapsed: 36.1min | ETA: 62.2min
+Progress: 150/381 (39.4%) | Elapsed: 38.7min | ETA: 59.6min
+Progress: 160/381 (42.0%) | Elapsed: 41.4min | ETA: 57.1min
+Progress: 170/381 (44.6%) | Elapsed: 43.8min | ETA: 54.4min
+Progress: 180/381 (47.2%) | Elapsed: 46.3min | ETA: 51.7min
+Progress: 190/381 (49.9%) | Elapsed: 48.8min | ETA: 49.0min
+Progress: 200/381 (52.5%) | Elapsed: 51.2min | ETA: 46.4min
+Progress: 210/381 (55.1%) | Elapsed: 53.7min | ETA: 43.7min
+Progress: 220/381 (57.7%) | Elapsed: 56.1min | ETA: 41.1min
+Progress: 230/381 (60.4%) | Elapsed: 58.6min | ETA: 38.5min
+Progress: 240/381 (63.0%) | Elapsed: 61.1min | ETA: 35.9min
+Progress: 250/381 (65.6%) | Elapsed: 63.5min | ETA: 33.3min
+Progress: 260/381 (68.2%) | Elapsed: 66.0min | ETA: 30.7min
+Progress: 270/381 (70.9%) | Elapsed: 68.5min | ETA: 28.1min
+Progress: 280/381 (73.5%) | Elapsed: 70.9min | ETA: 25.6min
+Progress: 290/381 (76.1%) | Elapsed: 73.4min | ETA: 23.0min
+Progress: 300/381 (78.7%) | Elapsed: 75.8min | ETA: 20.5min
+Progress: 310/381 (81.4%) | Elapsed: 78.3min | ETA: 17.9min
+Progress: 320/381 (84.0%) | Elapsed: 80.8min | ETA: 15.4min
+Progress: 330/381 (86.6%) | Elapsed: 83.2min | ETA: 12.9min
+Progress: 340/381 (89.2%) | Elapsed: 85.7min | ETA: 10.3min
+Progress: 350/381 (91.9%) | Elapsed: 88.1min | ETA: 7.8min
+Progress: 360/381 (94.5%) | Elapsed: 90.6min | ETA: 5.3min
+Progress: 370/381 (97.1%) | Elapsed: 93.0min | ETA: 2.8min
+Progress: 380/381 (99.7%) | Elapsed: 95.5min | ETA: 0.3min
+
+✓ Analysis complete! Total time: 95.7 minutes
+
+======================================================================
+ COMPREHENSIVE POLICY ANALYSIS (ALL DEMOS)
+======================================================================
+
+📊 Global Statistics:
+  Mean error across all demos:   0.016312
+  Median error:                  0.015212
+  Std deviation:                 0.005012
+  Min mean error (best demo):    0.008919
+  Max error (single timestep):   0.460145
+
+📈 Error Distribution (381 demos):
+  Excellent  (< 0.01):    14 demos (  3.7%)
+  Good    (0.01-0.02):   308 demos ( 80.8%)
+  Accept  (0.02-0.05):    59 demos ( 15.5%)
+  Poor       (> 0.05):     0 demos (  0.0%)
+
+⚠️  Top 10 Worst Performing Demos:
+   1. Demo 203: Mean error = 0.040869, Max error = 0.055880
+   2. Demo 207: Mean error = 0.039014, Max error = 0.056569
+   3. Demo 205: Mean error = 0.037753, Max error = 0.054958
+   4. Demo 210: Mean error = 0.035067, Max error = 0.055946
+   5. Demo 208: Mean error = 0.034969, Max error = 0.054314
+   6. Demo  65: Mean error = 0.032854, Max error = 0.052584
+   7. Demo  81: Mean error = 0.032672, Max error = 0.048277
+   8. Demo  30: Mean error = 0.032050, Max error = 0.042795
+   9. Demo 264: Mean error = 0.032041, Max error = 0.084780
+  10. Demo 148: Mean error = 0.030588, Max error = 0.063868
+
+✅ Top 10 Best Performing Demos:
+   1. Demo  33: Mean error = 0.008919
+   2. Demo  21: Mean error = 0.009019
+   3. Demo  32: Mean error = 0.009067
+   4. Demo   9: Mean error = 0.009146
+   5. Demo  13: Mean error = 0.009159
+   6. Demo 202: Mean error = 0.009167
+   7. Demo  44: Mean error = 0.009203
+   8. Demo  98: Mean error = 0.009399
+   9. Demo  10: Mean error = 0.009449
+  10. Demo  28: Mean error = 0.009520
+
+📊 Error Percentiles:
+  25th percentile: 0.012988
+  50th percentile: 0.015212
+  75th percentile: 0.018506
+  95th percentile: 0.025934
+  99th percentile: 0.034988
+
+======================================================================
+ INTERPRETATION
+======================================================================
+
+✓ GOOD: Policy predictions are reasonable
+   → 84.5% of demos have error < 0.02
+   → Policy captured main patterns
+   → Some simulation issues expected, but policy is functional
+
+======================================================================
+ NEXT STEPS
+======================================================================
+
+1. ✅ Policy is trained well → Focus on Isaac Sim deployment
+2. Debug simulation issues:
+   - IK solver accuracy
+   - Action scaling/normalization
+   - Camera calibration
+   - Gripper geometry (if in camera view)
+
+3. Investigate the 0 poor-performing demos (error > 0.05)
+   - Check if they have unusual motions or data issues
+
+======================================================================
+ GENERATING SUMMARY VISUALIZATIONS
+======================================================================
+✓ Saved: policy_ALL_DEMOS_analysis.png
+
+======================================================================
+ ✅ COMPREHENSIVE ANALYSIS COMPLETE
+======================================================================
+
+Results saved to: policy_ALL_DEMOS_analysis.png
+Total demos analyzed: 381
+Overall mean error: 0.016312
+
+Your policy is GOOD!
