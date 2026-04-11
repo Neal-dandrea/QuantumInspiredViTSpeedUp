@@ -1,0 +1,17 @@
+torch>=2.0.0
+torchvision
+torchaudio
+timm
+opencv-python
+matplotlib
+numpy
+pandas
+scikit-learn
+tqdm
+pillow
+omegaconf
+hydra-core
+wandb
+scipy
+zarr
+numcodecs
