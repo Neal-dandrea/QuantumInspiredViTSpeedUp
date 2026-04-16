@@ -5,8 +5,8 @@
 
 MEAN EXPLAINED VARIANCE RATIO (EVR) ACROSS ALL 144 MATRICES
 --------------------------------------------------------------------------------
-    Rank  8:   99.34%
-    Rank 16:   99.89%
+    Rank  8:   99.29%
+    Rank 16:   99.88%
     Rank 24:   99.97%
     Rank 32:   99.99%
 
@@ -14,14 +14,14 @@ MEAN EXPLAINED VARIANCE RATIO (EVR) ACROSS ALL 144 MATRICES
 
 BEST & WORST CASES AT RANK 16
 --------------------------------------------------------------------------------
-    Worst:  Layer 6, Head 12  ->  99.58% EVR
+    Worst:  Layer 6, Head 12  ->  99.55% EVR
     Best:   Layer 1, Head 2  ->  100.00% EVR
 
 LAYER GROUP ANALYSIS (EVR at r=16)
 --------------------------------------------------------------------------------
     Early layers  (L1-3):   99.98%
-    Middle layers (L4-9):   99.86%
-    Late layers   (L10-12): 99.84%
+    Middle layers (L4-9):   99.85%
+    Late layers   (L10-12): 99.83%
 
     Middle > Early?  NO
     Middle > Late?   YES

@@ -25,7 +25,7 @@ warnings.filterwarnings('ignore')
 # CONFIGURATION - EDIT THESE PATHS
 # ============================================================================
 
-CHECKPOINT_PATH = '/tmp/vit_encoder_only.pt'
+CHECKPOINT_PATH = r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\vit_encoder_only.pt'
 USE_EXTRACTED = True  # Add this line
 # VIDEO_PATHS = [
 #        '/home/wadeab/universal_manipulation_interface/example_demo_session/demos/demo_C3441328164125_2024.01.10_11.03.35.292183/raw_video.mp4',
@@ -35,10 +35,11 @@ USE_EXTRACTED = True  # Add this line
 # ]
 
 VIDEO_PATHS = [
-       '/home/wadeab/universal_manipulation_interface/data/session_001/GX010453.MP4',
-       '/home/wadeab/universal_manipulation_interface/data/session_001/GX010454.MP4',
-       '/home/wadeab/universal_manipulation_interface/data/session_001/GX010455.MP4',
-       '/home/wadeab/universal_manipulation_interface/data/session_001/GX010456.MP4',
+    r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010460.MP4',
+    r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010461.MP4',
+    r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010462.MP4',
+    r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010464.MP4',
+    r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010465.MP4',
 ]
 
 IMAGE_DIR = None  # Set this if you have a folder of images instead of videos
