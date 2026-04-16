@@ -88,7 +88,7 @@ class LowRankAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, attn_mask=None, is_causal=False, **kwargs) -> torch.Tensor:
         B, N, C = x.shape
         
         # Compute Q, K, V
@@ -410,13 +410,14 @@ def rank_sweep(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--checkpoint', type=str, default='/tmp/vit_encoder_only.pt')
+    parser.add_argument('--checkpoint', type=str, default=r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\vit_encoder_only.pt')
     parser.add_argument('--videos', type=str, nargs='+', default=[
-        # '/home/wadeab/universal_manipulation_interface/example_demo_session/demos/demo_C3441328164125_2024.01.10_11.03.35.292183/raw_video.mp4',
-        # '/home/wadeab/universal_manipulation_interface/example_demo_session/demos/demo_C3441328164125_2024.01.10_11.03.03.860783/raw_video.mp4',
-        '/home/wadeab/universal_manipulation_interface/data/session_001/GX010453.MP4',
-        '/home/wadeab/universal_manipulation_interface/data/session_001/GX010454.MP4',
-    ])
+         r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010460.MP4',
+         r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010461.MP4',
+         r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010462.MP4',
+         r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010464.MP4',
+         r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2\GX010465.MP4',
+])
 
     parser.add_argument('--mode', type=str, choices=['sweep', 'single'], default='sweep')
     parser.add_argument('--rank', type=int, default=8)
