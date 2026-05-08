@@ -1,15 +1,33 @@
 ======================================================================
-QLSA FORMULATION ANALYSIS REPORT
+QLSA FORMULATION ANALYSIS REPORT (Per-Layer A_i)
 ViT-B/16 Attention -> Block Matrix M for Quantum Linear System
 ======================================================================
 
-ATTENTION MATRIX A ANALYSIS
+Configuration:
+  Head analyzed: 0
+  Number of layers: 12
+  Sequence length: 197
+
+PER-LAYER ATTENTION MATRIX ANALYSIS
 ----------------------------------------
-Shape: (197, 197)
-Rank for 90% variance: 4
-Rank for 95% variance: 7
-Rank for 99% variance: 25
-Condition number: 2984551.00
+Layer    Rank@99%     Cond. Num.    
+1        50           46035.01      
+2        18           170903376.00  
+3        46           4472705.00    
+4        73           37442344.00   
+5        56           276599.44     
+6        25           2241612.75    
+7        24           6727567.50    
+8        11           34962204.00   
+9        6            76004160.00   
+10       18           26262840.00   
+11       16           4364365.50    
+12       9            7149773.50    
+
+Summary:
+  Average rank@99%: 29.3
+  Min rank@99%: 6
+  Max rank@99%: 73
 
 BLOCK MATRIX M SPARSITY
 ----------------------------------------
@@ -18,38 +36,48 @@ Non-zero elements: 468,269
 Sparsity: 92.8604%
 QLSA sparsity parameter s: 198
 
-CONDITION NUMBER & COMPLEXITY
+CONDITION NUMBER & COMPLEXITY (Block Matrix M)
 ----------------------------------------
-sigma_max: 2.180331
-sigma_min: 0.094538
-Condition number κ: 23.06
-QLSA complexity O(log N · κ · s): 5.17e+04
-Classical complexity O(N³): 1.68e+10
-Potential quantum speedup: 3.25e+05x
+sigma_max: 2.273750
+sigma_min: 0.091403
+Condition number kappa: 24.88
+QLSA complexity O(log N * kappa * s): 5.58e+04
+Classical complexity O(N^3): 1.68e+10
+Potential quantum speedup: 3.01e+05x
 
 ======================================================================
 INTERPRETATION FOR QUANTUM APPROACH
 ======================================================================
 
-The block matrix M encodes 12 iterations of the attention operation:
-    X_i = A · X_{i-1} + C
+This analysis uses PER-LAYER attention matrices A_i:
+    X_i = A_i * X_{i-1} + C  for i = 1, ..., 12
 
-This is reformulated as M · X = b, which can be solved using QLSA (HHL).
+Block matrix M structure:
+    | I     0     0    ...   0     0  |
+    |-A_1   I     0    ...   0     0  |
+    | 0    -A_2   I    ...   0     0  |
+    | :                  .         :  |
+    | 0     0     0    ... -A_12   I  |
 
 Key findings:
-1. The attention matrix A has low effective rank (~7 for 99% variance)
-   This confirms the low-rank structure we found in earlier analysis.
+1. Each layer has a DIFFERENT attention matrix A_i
+   This is more accurate than using a single A for all layers.
 
-2. The block matrix M is highly sparse due to its bidiagonal structure
-   (identity blocks on diagonal, -A blocks on sub-diagonal)
+2. The low-rank structure varies across layers
+   Early/late layers may have different effective ranks.
 
-3. The sparsity parameter s is determined by the density of A
-   For softmax attention, A is dense within each [197x197] block
+3. The block matrix M is still highly sparse
+   Sparsity comes from the block-bidiagonal structure.
 
-4. Condition number κ determines QLSA complexity
-   Lower κ = faster quantum algorithm
+4. C is treated as constant (simplification)
+   In reality, C_i varies per layer due to MLP nonlinearity.
+
+Simplifications made:
+- Using average attention across frames (A_i is input-dependent)
+- Using constant C for all layers (C_i varies in reality)
+- Analyzing single head (12 heads in parallel in actual ViT)
 
 Next steps:
-- Implement quantum state preparation for |b⟩
+- Implement quantum state preparation for |b>
 - Design quantum circuit for block-encoding M
-- Analyze measurement strategy for extracting |X⟩
+- Analyze measurement strategy for extracting |X>
