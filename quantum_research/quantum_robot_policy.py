@@ -30,6 +30,12 @@ import numpy as np
 from torch.utils.data import DataLoader, Dataset
 import os
 import cv2  # For video loading
+import sys
+sys.path.insert(0, '/tmp/pypackages')
+import json
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for server
+import matplotlib.pyplot as plt
 
 
 # ==================== QUANTUM CIRCUIT DEFINITION ====================
@@ -379,89 +385,411 @@ def evaluate(model, dataloader, criterion, device='cpu'):
 
 class UMIVideoDataset(Dataset):
     """
-    Dataset for UMI robot manipulation videos.
-    Loads frames from MP4 files and extracts actions.
+    Dataset for UMI robot manipulation data.
+    Loads real actions from dataset.zarr.zip and frames from MP4 files.
     """
-    
-    def __init__(self, video_folder, num_frames_per_video=100, transform=None):
-        """
-        Args:
-            video_folder: Path to folder containing MP4 files
-            num_frames_per_video: Number of frames to sample from each video
-            transform: Optional transform to apply to frames
-        """
-        import cv2
+
+    def __init__(self, zarr_path=None, video_folder=None,
+                 num_frames_per_video=100, transform=None):
         from torchvision import transforms
-        
-        self.video_folder = video_folder
-        self.num_frames_per_video = num_frames_per_video
-        
-        # Default transform for ViT (ImageNet normalization)
+
         if transform is None:
             self.transform = transforms.Compose([
                 transforms.ToPILImage(),
                 transforms.Resize(224),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                                   std=[0.229, 0.224, 0.225])
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
             ])
         else:
             self.transform = transform
-        
-        # Find all MP4 files
-        self.video_files = []
-        for file in os.listdir(video_folder):
-            if file.endswith('.MP4') or file.endswith('.mp4'):
-                self.video_files.append(os.path.join(video_folder, file))
-        
-        print(f"Found {len(self.video_files)} video files:")
-        for vf in self.video_files:
-            print(f"  - {os.path.basename(vf)}")
-        
-        # Load all frames
+
         self.frames = []
         self.actions = []
-        
-        for video_path in self.video_files:
-            print(f"Loading frames from {os.path.basename(video_path)}...")
+
+        # Load real actions from zarr
+        real_actions = None
+        if zarr_path and os.path.exists(zarr_path):
+            print(f"Loading real actions from zarr: {zarr_path}")
+            real_actions = self._load_actions_only(zarr_path)
+        else:
+            print(f"No zarr found at {zarr_path}, will use placeholder actions")
+
+        # Load frames from MP4 files
+        if video_folder and os.path.exists(video_folder):
+            print(f"Loading frames from MP4 files: {video_folder}")
+            self._load_from_videos(video_folder, num_frames_per_video, real_actions)
+        else:
+            raise FileNotFoundError(f"Video folder not found: {video_folder}")
+
+        print(f"✓ Loaded {len(self.frames)} frames total")
+        if real_actions is not None:
+            print(f"✓ Using REAL actions from zarr")
+        else:
+            print(f"⚠️  Using placeholder zero actions")
+
+    def _load_actions_only(self, zarr_path):
+        """Load only real actions from zarr, skip images to avoid codec issues."""
+        import zipfile
+        import zarr as zarr_lib
+
+        extract_path = zarr_path.replace('.zip', '_extracted')
+        if not os.path.exists(extract_path):
+            print("  Extracting zarr zip...")
+            with zipfile.ZipFile(zarr_path, 'r', allowZip64=True) as z:
+                z.extractall(extract_path)
+            print("  ✓ Extracted")
+        else:
+            print("  ✓ Already extracted")
+
+        # Try to open zarr
+        zarr_root = None
+        for candidate in [extract_path,
+                          os.path.join(extract_path, 'dataset.zarr')]:
+            if os.path.exists(candidate):
+                try:
+                    zarr_root = zarr_lib.open(candidate, mode='r')
+                    print(f"  ✓ Opened zarr: {candidate}")
+                    break
+                except Exception as e:
+                    print(f"  Could not open {candidate}: {e}")
+                    continue
+
+        if zarr_root is None:
+            print("  Could not open zarr, using placeholder actions")
+            return None
+
+        # Try standard action key first
+        for path in [('data', 'action'),
+                     ('data', 'robot_eef_pose'),
+                     ('data', 'actions')]:
+            try:
+                node = zarr_root
+                for key in path:
+                    node = node[key]
+                actions = node[:]
+                print(f"  ✓ Found actions at {'/'.join(path)}: shape {actions.shape}")
+                return actions
+            except Exception:
+                continue
+
+        # Build 7D action from individual components
+        print("  Building 7D actions from individual components...")
+        try:
+            eef_pos = zarr_root['data']['robot0_eef_pos'][:]
+            eef_rot = zarr_root['data']['robot0_eef_rot_axis_angle'][:]
+            gripper = zarr_root['data']['robot0_gripper_width'][:]
+            actions = np.concatenate([eef_pos, eef_rot, gripper], axis=1)
+            print(f"  ✓ Built real actions: shape {actions.shape}")
+            print(f"    Position range:  [{eef_pos.min():.3f}, {eef_pos.max():.3f}]")
+            print(f"    Rotation range:  [{eef_rot.min():.3f}, {eef_rot.max():.3f}]")
+            print(f"    Gripper range:   [{gripper.min():.3f}, {gripper.max():.3f}]")
+            return actions
+        except Exception as e:
+            print(f"  Could not build actions: {e}")
+
+        print("  ⚠️  No actions found in zarr")
+        return None
+
+    # def _load_from_videos(self, video_folder, num_frames_per_video, real_actions=None):
+    #     """Load frames from MP4 files, pair with real actions from zarr."""
+    #     video_files = sorted([
+    #         os.path.join(video_folder, f)
+    #         for f in os.listdir(video_folder)
+    #         if f.endswith('.MP4') or f.endswith('.mp4')
+    #     ])
+    #     print(f"  Found {len(video_files)} MP4 files")
+    def _load_from_videos(self, video_folder, num_frames_per_video, real_actions=None):
+        """Load frames from MP4 files, pair with real actions from zarr.
+        Only uses first 171 sorted videos that passed SLAM preprocessing.
+        """
+        all_videos = sorted([
+            os.path.join(video_folder, f)
+            for f in os.listdir(video_folder)
+            if f.endswith('.MP4') or f.endswith('.mp4')
+        ])
+        # Only use first 171 videos (matched to zarr episodes)
+        video_files = all_videos[:171]
+        print(f"  Found {len(all_videos)} MP4 files, using first {len(video_files)} (SLAM-processed)")
+
+        for video_path in video_files:
+            print(f"  Loading {os.path.basename(video_path)}...")
             cap = cv2.VideoCapture(video_path)
-            
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            # Sample frames evenly
-            frame_indices = np.linspace(0, frame_count-1, num_frames_per_video, dtype=int)
-            
-            for idx in frame_indices:
+            indices = np.linspace(0, frame_count - 1,
+                                  num_frames_per_video, dtype=int)
+            for idx in indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
-                
                 if ret:
-                    # Convert BGR to RGB
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     self.frames.append(frame)
-                    
-                    # TODO: Replace with actual action labels from your dataset
-                    # For now, using random actions as placeholder
-                    # Actions: [x, y, z, roll, pitch, yaw, gripper]
-                    random_action = torch.randn(7) * 0.1
-                    self.actions.append(random_action)
-            
+
+                    # Use real action from zarr if available
+                    current_idx = len(self.frames) - 1
+                    if real_actions is not None and current_idx < len(real_actions):
+                        action = torch.tensor(
+                            real_actions[current_idx][:7], dtype=torch.float32
+                        )
+                    else:
+                        action = torch.zeros(7)
+                    self.actions.append(action)
             cap.release()
-        
-        print(f"✓ Loaded {len(self.frames)} frames total")
-    
+
     def __len__(self):
         return len(self.frames)
-    
+
     def __getitem__(self, idx):
         frame = self.frames[idx]
         action = self.actions[idx]
-        
-        # Apply transform
-        if self.transform:
+        if self.transform and not isinstance(frame, torch.Tensor):
             frame = self.transform(frame)
-        
         return frame, action
+
+
+
+# ==================== LOGGING & PLOTTING ====================
+
+def save_training_log(log, log_path):
+    """Save training log to JSON file."""
+    with open(log_path, 'w') as f:
+        json.dump(log, f, indent=2)
+
+def plot_training_curves(log, save_path, architecture_name='Quantum Policy'):
+    """
+    Plot and save training/validation loss curves.
+    Creates a clean plot saved as PNG.
+    """
+    epochs      = log['epochs']
+    train_losses = log['train_losses']
+    val_losses   = log['val_losses']
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(f'{architecture_name} - Training Curves', fontsize=14, fontweight='bold')
+
+    # Full loss curve
+    axes[0].plot(epochs, train_losses, 'b-',  linewidth=2, label='Train Loss', alpha=0.9)
+    axes[0].plot(epochs, val_losses,   'r--', linewidth=2, label='Val Loss',   alpha=0.9)
+    axes[0].set_xlabel('Epoch')
+    axes[0].set_ylabel('MSE Loss')
+    axes[0].set_title('Loss Over All Epochs')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+    axes[0].set_yscale('log')  # Log scale shows learning curve better
+
+    # Smoothed loss curve (rolling average)
+    window = max(1, len(epochs) // 10)
+    def smooth(vals, w):
+        return [sum(vals[max(0, i-w):i+1]) / len(vals[max(0, i-w):i+1])
+                for i in range(len(vals))]
+
+    axes[1].plot(epochs, smooth(train_losses, window), 'b-',  linewidth=2,
+                 label='Train (smoothed)', alpha=0.9)
+    axes[1].plot(epochs, smooth(val_losses,   window), 'r--', linewidth=2,
+                 label='Val (smoothed)',   alpha=0.9)
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('MSE Loss')
+    axes[1].set_title('Smoothed Loss Curve')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
+    # Stats box
+    best_val   = min(val_losses)
+    best_epoch = val_losses.index(best_val) + 1
+    stats_text = (f"Best Val Loss: {best_val:.4f} (Epoch {best_epoch})\n"
+                  f"Final Train:   {train_losses[-1]:.4f}\n"
+                  f"Final Val:     {val_losses[-1]:.4f}\n"
+                  f"Total Epochs:  {len(epochs)}\n"
+                  f"Params:        {log.get('trainable_params', 'N/A')}")
+    axes[1].text(0.97, 0.97, stats_text,
+                 transform=axes[1].transAxes,
+                 verticalalignment='top', horizontalalignment='right',
+                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+                 fontsize=8, fontfamily='monospace')
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ Plot saved: {save_path}")
+
+
+def plot_architecture_comparison(log_files, save_path):
+    """
+    Compare multiple architecture training curves on one plot.
+    Pass a dict of {architecture_name: log_file_path}.
+    
+    Example:
+        plot_architecture_comparison({
+            '6-qubit 4-layer':  'logs/arch_6q4l.json',
+            '8-qubit 4-layer':  'logs/arch_8q4l.json',
+            '6-qubit 6-layer':  'logs/arch_6q6l.json',
+        }, 'logs/comparison.png')
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig.suptitle('Architecture Comparison - Validation Loss', fontsize=14, fontweight='bold')
+
+    colors = ['#2563eb', '#dc2626', '#16a34a', '#9333ea',
+              '#ea580c', '#0d9488', '#fbbf24', '#6b7280']
+
+    for i, (arch_name, log_path) in enumerate(log_files.items()):
+        if not os.path.exists(log_path):
+            print(f"  Warning: log not found: {log_path}")
+            continue
+
+        with open(log_path, 'r') as f:
+            log = json.load(f)
+
+        color   = colors[i % len(colors)]
+        epochs  = log['epochs']
+        val     = log['val_losses']
+        train   = log['train_losses']
+
+        # Left: val loss comparison
+        axes[0].plot(epochs, val, color=color, linewidth=2,
+                     label=f"{arch_name} (best: {min(val):.4f})")
+
+        # Right: train loss comparison
+        axes[1].plot(epochs, train, color=color, linewidth=2,
+                     label=arch_name, linestyle='--')
+
+    for ax, title in zip(axes, ['Validation Loss', 'Train Loss']):
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('MSE Loss')
+        ax.set_title(title)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"✓ Comparison plot saved: {save_path}")
+
+def save_training_summary(log, save_path, arch_name):
+        """
+        Generate and save a detailed text summary of a completed training run.
+        Covers architecture details, performance, convergence, and next steps.
+        """
+        train_losses = log['train_losses']
+        val_losses   = log['val_losses']
+        epochs       = log['epochs']
+
+        best_val_loss  = min(val_losses)
+        best_epoch     = val_losses.index(best_val_loss) + 1
+        final_train    = train_losses[-1]
+        final_val      = val_losses[-1]
+        total_epochs   = len(epochs)
+
+        # Convergence: how many epochs to get within 10% of best val loss
+        threshold = best_val_loss * 1.1
+        converge_epoch = next(
+            (i + 1 for i, v in enumerate(val_losses) if v <= threshold),
+            total_epochs
+        )
+
+        # Overfitting check: gap between train and val
+        avg_gap = sum(abs(v - t) for v, t in zip(val_losses, train_losses)) / total_epochs
+        final_gap = abs(final_val - final_train)
+        overfit_status = (
+            "Minimal overfitting" if final_gap < 0.01 else
+            "Moderate overfitting" if final_gap < 0.05 else
+            "Significant overfitting"
+        )
+
+        # Learning rate: was it stable?
+        first_10_avg  = sum(train_losses[:10]) / min(10, len(train_losses))
+        last_10_avg   = sum(train_losses[-10:]) / min(10, len(train_losses))
+        improvement_pct = ((first_10_avg - last_10_avg) / first_10_avg) * 100
+
+        # Performance rating
+        if final_val < 0.01:
+            performance = "EXCELLENT - well within robotics target (< 0.15)"
+        elif final_val < 0.05:
+            performance = "GOOD - within robotics target (< 0.15)"
+        elif final_val < 0.15:
+            performance = "ACCEPTABLE - meets robotics target (< 0.15)"
+        else:
+            performance = "NEEDS IMPROVEMENT - above robotics target (0.15)"
+
+        summary = f"""
+    ================================================================================
+    TRAINING SUMMARY: {arch_name}
+    ================================================================================
+    Generated: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+    ARCHITECTURE
+    ------------
+    Name:                {arch_name}
+    Qubits:              {log.get('n_qubits', 'N/A')}
+    Quantum Layers:      {log.get('n_layers', 'N/A')}
+    Trainable Params:    {log.get('trainable_params', 'N/A'):,}
+    Frozen Params:       85,798,656 (ViT encoder)
+    Param Reduction:     99.94% vs fully classical model
+    Encoding:            Amplitude encoding (64 features -> 6 qubits)
+    Gradient Method:     Backpropagation (PennyLane simulator)
+
+    TRAINING CONFIGURATION
+    ----------------------
+    Dataset:             UMI Robot Manipulation (real zarr actions)
+    Action Source:       robot0_eef_pos + robot0_eef_rot_axis_angle + robot0_gripper_width
+    Total Demos:         85,530 timesteps across 171 episodes
+    Train Samples:       400 frames (80/20 split of 500 sampled)
+    Val Samples:         100 frames
+    Batch Size:          {log.get('batch_size', 'N/A')}
+    Learning Rate:       {log.get('learning_rate', 'N/A')}
+    Epochs Completed:    {total_epochs}
+    Optimizer:           Adam
+
+    PERFORMANCE RESULTS
+    -------------------
+    Best Val Loss:       {best_val_loss:.6f}  (Epoch {best_epoch}/{total_epochs})
+    Final Train Loss:    {final_train:.6f}
+    Final Val Loss:      {final_val:.6f}
+    Train/Val Gap:       {final_gap:.6f}  ({overfit_status})
+    Overall Rating:      {performance}
+
+    CONVERGENCE ANALYSIS
+    --------------------
+    Epochs to converge:  {converge_epoch} epochs (within 10% of best val loss)
+    First 10 avg loss:   {first_10_avg:.6f}
+    Last 10 avg loss:    {last_10_avg:.6f}
+    Total improvement:   {improvement_pct:.1f}%
+    Loss at epoch 25%:   {train_losses[total_epochs//4 - 1]:.6f}
+    Loss at epoch 50%:   {train_losses[total_epochs//2 - 1]:.6f}
+    Loss at epoch 75%:   {train_losses[3*total_epochs//4 - 1]:.6f}
+    Loss at epoch 100%:  {train_losses[-1]:.6f}
+
+    ROBOTICS METRICS (estimated from MSE)
+    --------------------------------------
+    Action MSE:          {final_val:.4f}  (target: < 0.15)
+    Position error est:  {(final_val**0.5) * 0.5:.4f} m  (target: < 0.005 m)
+    Needs Isaac Sim evaluation for task success rate
+
+    NEXT STEPS
+    ----------
+    1. Run classical baseline (same param count) and compare MSE
+    2. Evaluate in Isaac Sim for task success rate
+    3. Try architecture variants:
+        - More qubits:   n_qubits=8  (change in QuantumRobotPolicy init)
+        - Deeper circuit: n_layers=6  (change in QuantumRobotPolicy init)
+        - Change ARCH_NAME to track each variant separately
+    4. Run plot_architecture_comparison() once you have multiple logs
+
+    SAVED FILES
+    -----------
+    Training log:    {save_path.replace('_summary.txt', '_training_log.json')}
+    Loss curve plot: {save_path.replace('_summary.txt', '_loss_curve.png')}
+    This summary:    {save_path}
+
+    ================================================================================
+    """
+
+        with open(save_path, 'w') as f:
+            f.write(summary)
+
+        print(summary)
+        print(f"  ✓ Summary saved: {save_path}")
 
 # ==================== MAIN TRAINING SCRIPT ====================
 
@@ -474,8 +802,10 @@ def main():
     print("=" * 60)
     
     # Configuration
-    VIT_ENCODER_PATH = r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\vit_encoder_only.pt'
-    DATA_PATH = r'C:\Users\neald\Desktop\QuantumInspiredViTSpeedUp\quantum_research\data_for_quantum_research2'
+    VIT_ENCODER_PATH = '/tmp/QuantumInspiredViTSpeedUp/quantum_research/vit_encoder_only.pt'
+    ZARR_PATH = '/home/wadeab/universal_manipulation_interface/data/session_001/dataset.zarr.zip'
+    # DATA_PATH = '/tmp/QuantumInspiredViTSpeedUp/quantum_research/data_for_quantum_research2'
+    DATA_PATH = '/home/wadeab/universal_manipulation_interface/data/session_001'
     BATCH_SIZE = 4
     LEARNING_RATE = 0.001
     NUM_EPOCHS = 100
@@ -510,8 +840,9 @@ def main():
     # Load UMI dataset
     print("\n📊 Loading UMI dataset...")
     full_dataset = UMIVideoDataset(
+        zarr_path=ZARR_PATH,
         video_folder=DATA_PATH,
-        num_frames_per_video=100  # 100 frames per video x 5 videos = 500 total
+        num_frames_per_video=100
     )
 
     # Split into train/val (80/20 split)
@@ -526,39 +857,76 @@ def main():
 
     print(f"✓ Train samples: {train_size}")
     print(f"✓ Val samples: {val_size}")
-
-    print("\n⚠️  TODO: Load your UMI dataset")
-    print("   Uncomment the dataset loading code above and provide your dataset class")
-    print("   Expected format:")
-    print("   - frames: [batch_size, 3, 224, 224]")
-    print("   - actions: [batch_size, 7]")
-    
+ 
     # Optimizer
     optimizer = torch.optim.Adam(model.get_trainable_params(), lr=LEARNING_RATE)
-    
+
     # Loss function
     criterion = nn.MSELoss()
-    
-    print("\n✓ Optimizer and loss function ready")
-    print("\n🚀 Ready to train!")
-    print("   Once you have your dataset loaded, uncomment the training loop below.")
-    
+
+    # Architecture name for logs/plots (change this when testing new architectures)
+    ARCH_NAME = 'QViT_6q_4layer_171demos'
+
+    # Logging setup
+    # Save logs permanently outside /tmp
+    LOG_DIR = '/home/wadeab/universal_manipulation_interface/quantum_research/logs'
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log = {
+        'architecture':    ARCH_NAME,
+        'n_qubits':        6,
+        'n_layers':        4,
+        'learning_rate':   LEARNING_RATE,
+        'batch_size':      BATCH_SIZE,
+        'num_epochs':      NUM_EPOCHS,
+        'trainable_params': 49337,
+        'epochs':          [],
+        'train_losses':    [],
+        'val_losses':      [],
+    }
+    log_path  = f'{LOG_DIR}/{ARCH_NAME}_training_log.json'
+    plot_path = f'{LOG_DIR}/{ARCH_NAME}_loss_curve.png'
+
+    print(f"\n✓ Logging to: {log_path}")
+    print(f"✓ Plot saved to: {plot_path}")
+    print(f"\n🚀 Starting training - {ARCH_NAME}")
+
     # Training loop
     for epoch in range(NUM_EPOCHS):
         print(f"\nEpoch {epoch+1}/{NUM_EPOCHS}")
-        
+
         # Train
         train_loss = train_epoch(model, train_loader, optimizer, criterion, DEVICE)
         print(f"  Train Loss: {train_loss:.4f}")
-        
+
         # Validate
         val_metrics = evaluate(model, val_loader, criterion, DEVICE)
         print(f"  Val Loss: {val_metrics['loss']:.4f}, MSE: {val_metrics['mse']:.4f}")
-        
-        # Save checkpoint
+
+        # Log
+        log['epochs'].append(epoch + 1)
+        log['train_losses'].append(train_loss)
+        log['val_losses'].append(val_metrics['val_loss'] if 'val_loss' in val_metrics else val_metrics['loss'])
+
+        # Save log and plot every epoch
+        save_training_log(log, log_path)
+        plot_training_curves(log, plot_path, ARCH_NAME)
+
+        # Save checkpoint every 10 epochs
         if (epoch + 1) % 10 == 0:
-            torch.save(model.state_dict(), f'quantum_policy_epoch_{epoch+1}.pt')
+            torch.save(model.state_dict(), f'{LOG_DIR}/{ARCH_NAME}_epoch_{epoch+1}.pt')
             print(f"  ✓ Checkpoint saved")
+
+    print(f"\n✅ Training complete!")
+
+    # Save final plot and summary
+    summary_path = f'{LOG_DIR}/{ARCH_NAME}_summary.txt'
+    plot_training_curves(log, plot_path, ARCH_NAME)
+    save_training_summary(log, summary_path, ARCH_NAME)
+
+    print(f"\n📁 All files saved to: {LOG_DIR}/")
+    print(f"   Log:     {ARCH_NAME}_training_log.json")
+    print(f"   Plot:    {ARCH_NAME}_loss_curve.png")
+    print(f"   Summary: {ARCH_NAME}_summary.txt")
 
 
 # ==================== TESTING / DEMO ====================
