@@ -500,33 +500,32 @@ class UMIVideoDataset(Dataset):
     #         if f.endswith('.MP4') or f.endswith('.mp4')
     #     ])
     #     print(f"  Found {len(video_files)} MP4 files")
+
     def _load_from_videos(self, video_folder, num_frames_per_video, real_actions=None):
-        """Load frames from MP4 files, pair with real actions from zarr.
+        """Load frames from pre-extracted JPEGs for fast training.
         Only uses first 171 sorted videos that passed SLAM preprocessing.
+        Falls back to MP4 lazy loading if extracted frames not available.
         """
-        all_videos = sorted([
-            os.path.join(video_folder, f)
-            for f in os.listdir(video_folder)
-            if f.endswith('.MP4') or f.endswith('.mp4')
-        ])
-        # Only use first 171 videos (matched to zarr episodes)
-        video_files = all_videos[:171]
-        print(f"  Found {len(all_videos)} MP4 files, using first {len(video_files)} (SLAM-processed)")
+        frames_dir = '/home/wadeab/universal_manipulation_interface/data/extracted_frames'
 
-        for video_path in video_files:
-            print(f"  Loading {os.path.basename(video_path)}...")
-            cap = cv2.VideoCapture(video_path)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            indices = np.linspace(0, frame_count - 1,
-                                  num_frames_per_video, dtype=int)
-            for idx in indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                ret, frame = cap.read()
-                if ret:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    self.frames.append(frame)
+        if os.path.exists(frames_dir):
+            print(f"  Using pre-extracted frames from: {frames_dir}")
+            video_folders = sorted([
+                os.path.join(frames_dir, d)
+                for d in os.listdir(frames_dir)
+                if os.path.isdir(os.path.join(frames_dir, d))
+            ])[:171]
+            print(f"  Found {len(video_folders)} extracted video folders")
 
-                    # Use real action from zarr if available
+            for folder in video_folders:
+                frame_files = sorted([
+                    os.path.join(folder, f)
+                    for f in os.listdir(folder)
+                    if f.endswith('.jpg')
+                ])[:num_frames_per_video]
+
+                for frame_path in frame_files:
+                    self.frames.append(frame_path)
                     current_idx = len(self.frames) - 1
                     if real_actions is not None and current_idx < len(real_actions):
                         action = torch.tensor(
@@ -535,18 +534,72 @@ class UMIVideoDataset(Dataset):
                     else:
                         action = torch.zeros(7)
                     self.actions.append(action)
-            cap.release()
+
+        else:
+            print(f"  No extracted frames found, falling back to MP4 lazy loading")
+            all_videos = sorted([
+                os.path.join(video_folder, f)
+                for f in os.listdir(video_folder)
+                if f.endswith('.MP4') or f.endswith('.mp4')
+            ])
+            video_files = all_videos[:171]
+            print(f"  Found {len(all_videos)} MP4 files, using first {len(video_files)} (SLAM-processed)")
+
+            for video_path in video_files:
+                print(f"  Indexing {os.path.basename(video_path)}...")
+                cap = cv2.VideoCapture(video_path)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+
+                indices = np.linspace(0, frame_count - 1,
+                                      num_frames_per_video, dtype=int)
+                for idx in indices:
+                    self.frames.append((video_path, int(idx)))
+                    current_idx = len(self.frames) - 1
+                    if real_actions is not None and current_idx < len(real_actions):
+                        action = torch.tensor(
+                            real_actions[current_idx][:7], dtype=torch.float32
+                        )
+                    else:
+                        action = torch.zeros(7)
+                    self.actions.append(action)
 
     def __len__(self):
         return len(self.frames)
 
+    # def __getitem__(self, idx):
+    #     frame = self.frames[idx]
+    #     action = self.actions[idx]
+    #     if self.transform and not isinstance(frame, torch.Tensor):
+    #         frame = self.transform(frame)
+    #     return frame, action
     def __getitem__(self, idx):
-        frame = self.frames[idx]
+        frame_ref = self.frames[idx]
         action = self.actions[idx]
-        if self.transform and not isinstance(frame, torch.Tensor):
+
+        # Handle both JPEG path (string) and MP4 lazy ref (tuple)
+        if isinstance(frame_ref, str):
+            # Fast JPEG read from pre-extracted frames
+            frame = cv2.imread(frame_ref)
+            if frame is not None:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            else:
+                frame = np.zeros((224, 224, 3), dtype=np.uint8)
+        else:
+            # Fallback MP4 lazy load
+            video_path, frame_idx = frame_ref
+            cap = cv2.VideoCapture(video_path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            cap.release()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            else:
+                frame = np.zeros((224, 224, 3), dtype=np.uint8)
+
+        if self.transform:
             frame = self.transform(frame)
         return frame, action
-
 
 
 # ==================== LOGGING & PLOTTING ====================
@@ -776,7 +829,59 @@ def save_training_summary(log, save_path, arch_name):
         - Change ARCH_NAME to track each variant separately
     4. Run plot_architecture_comparison() once you have multiple logs
 
-    SAVED FILES
+    SAVED FILESme loading from disk...
+   Per frame: 0.218 sec
+   Per batch of 16: 3.481 sec
+
+2. ViT forward on GPU...
+   Per batch of 16: 0.001 sec
+
+3. Quantum circuit (16 samples)...
+   Per batch of 16: 0.076 sec
+
+=== Per Batch Breakdown ===
+Frame loading:   3.481 sec
+ViT forward:     0.001 sec
+Quantum circuit: 0.076 sec
+Total per batch: 3.558 sec
+
+Batches per epoch: 106
+Time per epoch: 6.3 minutes
+100 epochs total: 10.5 hours
+(umi) wadeab@aeem-ouma-h25dl:/tmp/QuantumInspiredViTSpeedUp/quantum_research$ python -c "
+import cv2, os, numpy as np
+from pathlib import Path
+
+video_dir = '/home/wadeab/universal_manipulation_interface/data/session_001'
+frames_dir = '/home/wadeab/universal_manipulation_interface/data/extracted_frames'
+os.makedirs(frames_dir, exist_ok=True)
+
+videos = sorted([f for f in os.listdir(video_dir) if f.endswith('.MP4')])[:171]
+print(f'Extracting frames from {len(videos)} videos...')
+
+for v_idx, video_name in enumerate(videos):
+    video_path = os.path.join(video_dir, video_name)
+    video_stem = video_name.replace('.MP4', '')
+    video_frame_dir = os.path.join(frames_dir, video_stem)
+    os.makedirs(video_frame_dir, exist_ok=True)
+
+    cap = cv2.VideoCapture(video_path)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+"rint(f'New 100 epoch estimate: {elapsed * 1710 * 100 / 3600:.1f} hours')2BGR), 
+Extracting frames from 171 videos...
+  20/171 videos done
+  40/171 videos done
+  60/171 videos done
+  80/171 videos done
+  100/171 videos done
+  120/171 videos done
+  140/171 videos done
+  160/171 videos done
+Done! Testing read speed...
+Per frame from JPEG: 0.0267 sec
+Speedup vs MP4 seek: 8x
+New 100 epoch estimate: 1.3 hours
+(umi) wadeab@aeem-ouma-h25dl:/tmp/QuantumInspiredViTSpeedUp/quantum_research$ 
     -----------
     Training log:    {save_path.replace('_summary.txt', '_training_log.json')}
     Loss curve plot: {save_path.replace('_summary.txt', '_loss_curve.png')}
@@ -806,7 +911,7 @@ def main():
     ZARR_PATH = '/home/wadeab/universal_manipulation_interface/data/session_001/dataset.zarr.zip'
     # DATA_PATH = '/tmp/QuantumInspiredViTSpeedUp/quantum_research/data_for_quantum_research2'
     DATA_PATH = '/home/wadeab/universal_manipulation_interface/data/session_001'
-    BATCH_SIZE = 4
+    BATCH_SIZE = 16
     LEARNING_RATE = 0.001
     NUM_EPOCHS = 100
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -852,8 +957,12 @@ def main():
         full_dataset, [train_size, val_size]
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    # train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, 
+                              shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, 
+                            shuffle=False, num_workers=4, pin_memory=True)
 
     print(f"✓ Train samples: {train_size}")
     print(f"✓ Val samples: {val_size}")
